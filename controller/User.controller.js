@@ -1,18 +1,56 @@
 import { User } from "../models/Users.model.js";
 import jwt from "jsonwebtoken"
 import dotenv from "dotenv"
-
+import bcrypt from "bcrypt"
 dotenv.config()
 
 
 const signup = async (req,res)=>{
     try{
-        const product = await User.create(req.body)
-        res.status(200).send("user created successfully")
+        const user = await User.findOne({username: req.body.username}) //checks if user already exists in DB
+        console.log(user.username)
+        if(user.username == req.body.username){
+            res.status(409).json({message: "User already exists"})  
+        }else{
+            const product = await User.create(req.body)
+            res.status(200).json({message:"User created successfully"})
+        }
     }catch (error){
         res.send(error)
     }
 }
+
+
+const login = async (req,res)=>{
+    try{
+
+        const user = await User.findOne({username: req.body.username})
+        
+        if(user == null){
+            res.status(409).json({message:"User not found"})
+        }else{
+
+            const isPasswordSame = await bcrypt.compare(req.body.password, user.password)
+            if(!isPasswordSame){
+                res.status(401).json({message: "Unauthorized Access"})
+            }else{
+                const payload = {fname: user.fname, username: user.username, email: user.email}
+                const accessToken = jwt.sign(payload,process.env.ACCESS_TOKEN,{expiresIn: "5 minutes"})
+                const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN, {expiresIn: "10 minutes"})
+                
+                await User.updateOne({username:user.username},{
+                    $set: {refreshToken: refreshToken}
+                })
+    
+                res.cookie('jwt',refreshToken,{ httpOnly: true, sameSite: 'None', secure: true, maxAge: 10*60*1000})
+                res.status(200).json({accessToken})
+            }
+        }    
+    }catch(error){
+        res.send(error)
+    }
+}
+
 
 const searchUser = async (req,res)=>{
     try{
@@ -27,38 +65,32 @@ const searchUser = async (req,res)=>{
     }
 }
 
-const login = async (req,res)=>{
-    try{    
-        const user = await User.findOne({username: req.body.username, password: req.body.password})
-        console.log(user)
-        if(user == ""){
-            res.status(409).send("User not found")
-        }else{
-            const payload = {fname: user.fname, username: user.username, email: user.email}
-            const accessToken = jwt.sign(payload,process.env.ACCESS_TOKEN,{expiresIn: "1 minutes"})
-            const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN, {expiresIn: "3 minutes"})
-            
-            await User.updateOne({username:user.username},{
-                $set: {refreshToken: refreshToken}
-            })
-
-            res.cookie('jwt',refreshToken,{ httpOnly: true, sameSite: 'None', secure: true, maxAge: 24*60*60*1000})
-            res.status(200).json({accessToken})
-        }
-    }catch(error){
-        res.send(error)
-    }
-}
 
 const generateToken = (req,res)=>{
     try{
-        console.log(req.headers),
-        console.log(res.headers)
-        res.send(200)
+        const refreshToken = req.headers.cookie
+        const accessToken = req.headers.authorization.split(" ")
+
+        if(refreshToken == undefined){
+            res.status(401).send("Refresh Token Expired")
+        }else{
+           const refreshTokenContent = refreshToken.split("=")
+           if(accessToken[1] == undefined){
+                const validateRefreshToken = jwt.verify( refreshTokenContent[1], process.env.REFRESH_TOKEN)
+                const payload = {fname: validateRefreshToken.fname, username: validateRefreshToken.username, email: validateRefreshToken.email}
+            
+                const newAccessToken = jwt.sign(payload,process.env.ACCESS_TOKEN, {expiresIn: "5 minutes"})
+                res.status(200).json({newAccessToken})
+            }else{
+                res.status(200).send("User is authorised")
+            }
+        }
     }catch(error){
-        console.log(error)
+        res.status(401).send(error)
     }
 }
+
+
 
 const sendFriendRequest = async (req,res)=>{
     try{

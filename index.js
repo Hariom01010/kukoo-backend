@@ -13,7 +13,7 @@ app.use(express.json())
 app.use(cors({
     origin:  function (origin,callback){
         if(whitelistOrigin.indexOf(origin) != -1 || !origin){
-            console.log("request processed succesfully")
+            // console.log("request processed succesfully")
             callback(null,true)
         }else{
             console.log("not allowed by cors")
@@ -38,7 +38,7 @@ app.get('/', (req,res)=>{
 
 mongoose.connect(process.env.MONGO_URI).then(()=>{
     console.log("Database connected succesfully")
-    app.listen(port,'0.0.0.0',()=>{console.log("server listening")})
+    app.listen(port,'0.0.0.0',()=>{console.log(`Server listening on port:${port}`)})
 }).catch(()=>{
     console.log("couldn't connect to server")
 })
